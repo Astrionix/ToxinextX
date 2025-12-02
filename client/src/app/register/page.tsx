@@ -29,7 +29,15 @@ export default function Register() {
                 body: JSON.stringify({ email, password, username }),
             });
 
-            const data = await res.json();
+            let data;
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                data = await res.json();
+            } else {
+                const text = await res.text();
+                console.error("Non-JSON response:", text);
+                throw new Error("Server connection failed. Please check if the backend is running and reachable.");
+            }
 
             if (!res.ok) {
                 throw new Error(data.error || "Registration failed");
