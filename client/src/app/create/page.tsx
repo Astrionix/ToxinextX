@@ -1,4 +1,4 @@
-"use client";
+import { API_URL } from "@/config";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -48,7 +48,7 @@ export default function CreatePost() {
             formData.append("location", "Unknown");
             formData.append("image", imageFile);
 
-            const res = await fetch("http://localhost:5000/api/posts", {
+            const res = await fetch(`${API_URL}/api/posts`, {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${session.access_token}`

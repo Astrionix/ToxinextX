@@ -1,4 +1,4 @@
-"use client";
+import { API_URL } from "@/config";
 
 import { useEffect, useState, useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -39,7 +39,7 @@ export default function MessagesPage() {
 
     const fetchChats = async (userId: string) => {
         try {
-            const res = await fetch(`http://localhost:5000/api/chats?userId=${userId}`);
+            const res = await fetch(`${API_URL}/api/chats?userId=${userId}`);
             const data = await res.json();
             if (res.ok) setChats(data);
         } catch (err) {
@@ -49,7 +49,7 @@ export default function MessagesPage() {
 
     const fetchMessages = async (chatId: string) => {
         try {
-            const res = await fetch(`http://localhost:5000/api/chats/${chatId}/messages`);
+            const res = await fetch(`${API_URL}/api/chats/${chatId}/messages`);
             const data = await res.json();
             if (res.ok) setMessages(data);
         } catch (err) {
@@ -62,7 +62,7 @@ export default function MessagesPage() {
         if (!newMessage.trim() || !selectedChat || !currentUser) return;
 
         try {
-            const res = await fetch(`http://localhost:5000/api/chats/${selectedChat.id}/messages`, {
+            const res = await fetch(`${API_URL}/api/chats/${selectedChat.id}/messages`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ sender_id: currentUser.id, text: newMessage }),

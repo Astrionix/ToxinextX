@@ -1,4 +1,4 @@
-"use client";
+import { API_URL } from "@/config";
 
 import { useEffect, useState } from "react";
 import { StoryBar } from "@/components/StoryBar";
@@ -16,7 +16,7 @@ export default function Home() {
 
     const fetchPosts = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/posts");
+        const res = await fetch(`${API_URL}/api/posts`);
         const data = await res.json();
         if (res.ok) {
           setPosts(data);

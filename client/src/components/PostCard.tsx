@@ -6,6 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, ShieldCheck, Smile } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { API_URL } from "@/config";
 
 interface PostProps {
     postId: string;
@@ -53,7 +54,7 @@ export function PostCard({ postId, username, avatar, image, caption, likes: init
             const sessionStr = localStorage.getItem("supabase_session");
             const token = sessionStr ? JSON.parse(sessionStr).access_token : null;
 
-            const response = await fetch(`http://localhost:5000/api/comments/${postId}`, {
+            const response = await fetch(`${API_URL}/api/comments/${postId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

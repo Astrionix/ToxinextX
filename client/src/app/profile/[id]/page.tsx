@@ -1,4 +1,4 @@
-"use client";
+import { API_URL } from "@/config";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -24,7 +24,7 @@ export default function ProfilePage() {
 
         const fetchProfile = async () => {
             try {
-                const res = await fetch(`http://localhost:5000/api/users/${id}`);
+                const res = await fetch(`${API_URL}/api/users/${id}`);
                 const data = await res.json();
                 if (res.ok) {
                     setUser(data);
@@ -44,7 +44,7 @@ export default function ProfilePage() {
         if (currentUser && id && currentUser.id !== id) {
             const checkFollow = async () => {
                 try {
-                    const res = await fetch(`http://localhost:5000/api/follows/check?follower_id=${currentUser.id}&following_id=${id}`);
+                    const res = await fetch(`${API_URL}/api/follows/check?follower_id=${currentUser.id}&following_id=${id}`);
                     const data = await res.json();
                     setIsFollowing(data.isFollowing);
                 } catch (err) {
@@ -60,14 +60,14 @@ export default function ProfilePage() {
 
         try {
             if (isFollowing) {
-                await fetch("http://localhost:5000/api/follows/remove", {
+                await fetch(`${API_URL}/api/follows/remove`, {
                     method: "DELETE",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ follower_id: currentUser.id, following_id: id }),
                 });
                 setIsFollowing(false);
             } else {
-                await fetch("http://localhost:5000/api/follows/add", {
+                await fetch(`${API_URL}/api/follows/add`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ follower_id: currentUser.id, following_id: id }),

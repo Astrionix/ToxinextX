@@ -1,4 +1,4 @@
-"use client";
+import { API_URL } from "@/config";
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ export default function SearchPage() {
 
         setLoading(true);
         try {
-            const res = await fetch(`http://localhost:5000/api/users/search?query=${query}`);
+            const res = await fetch(`${API_URL}/api/users/search?query=${query}`);
             const data = await res.json();
             if (data.results) {
                 setResults(data.results);

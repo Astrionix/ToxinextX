@@ -1,4 +1,4 @@
-"use client";
+import { API_URL } from "@/config";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -21,7 +21,7 @@ export default function Register() {
         setError("");
 
         try {
-            const res = await fetch("http://localhost:5000/api/auth/register", {
+            const res = await fetch(`${API_URL}/api/auth/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email, password, username }),
