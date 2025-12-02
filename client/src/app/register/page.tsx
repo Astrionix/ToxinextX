@@ -1,3 +1,5 @@
+"use client";
+
 import { API_URL } from "@/config";
 
 import { useState } from "react";
