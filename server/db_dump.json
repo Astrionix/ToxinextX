@@ -1,0 +1,84 @@
+{
+  "comments": [],
+  "users": [
+    {
+      "id": "2f6332fd-213e-47a1-9843-c00eb464f56c",
+      "email": "chandu3319r@gmail.com",
+      "username": "chan",
+      "bio": null,
+      "avatar_url": "",
+      "warnings_count": 0,
+      "risk_score": 0,
+      "is_shadow_banned": false,
+      "created_at": "2025-12-02T07:01:10.0118+00:00"
+    },
+    {
+      "id": "9c787872-45be-4fb4-a323-ff5e4199aced",
+      "email": "astrionix0@gmail.com",
+      "username": "ram",
+      "bio": null,
+      "avatar_url": "",
+      "warnings_count": 0,
+      "risk_score": 0,
+      "is_shadow_banned": false,
+      "created_at": "2025-12-02T07:02:42.116807+00:00"
+    },
+    {
+      "id": "b1c7a4fe-f88c-4839-bc78-2d05693d00d4",
+      "email": "testuser4@example.com",
+      "username": "admin2@example.comtestuser4",
+      "bio": null,
+      "avatar_url": "",
+      "warnings_count": 0,
+      "risk_score": 0,
+      "is_shadow_banned": false,
+      "created_at": "2025-12-02T07:06:50.977948+00:00"
+    },
+    {
+      "id": "243e84e2-3b1e-4d26-a50c-e1605d473822",
+      "email": "modtest2@example.com",
+      "username": "Astrionix0@gmail.commodtest2",
+      "bio": null,
+      "avatar_url": "",
+      "warnings_count": 0,
+      "risk_score": 0,
+      "is_shadow_banned": false,
+      "created_at": "2025-12-02T08:48:19.651772+00:00"
+    },
+    {
+      "id": "af7770d3-bffc-44ba-a018-bd25f560e110",
+      "email": "padalalmrreddy@gmail.com",
+      "username": "chan23",
+      "bio": null,
+      "avatar_url": "",
+      "warnings_count": 0,
+      "risk_score": 0,
+      "is_shadow_banned": false,
+      "created_at": "2025-12-02T08:48:39.157581+00:00"
+    }
+  ],
+  "posts": [
+    {
+      "id": "d8284f77-cea0-49e4-93e8-d34065b7f8de",
+      "user_id": "9c787872-45be-4fb4-a323-ff5e4199aced",
+      "image_url": "https://pixabay.com/images/search/apple%20logo/",
+      "caption": "hello",
+      "location": "Unknown",
+      "ai_label": "safe",
+      "ai_toxicity": 0,
+      "is_blocked": false,
+      "created_at": "2025-12-02T07:15:59.033566+00:00"
+    },
+    {
+      "id": "d34d9fb7-3666-4678-84c3-8b1f7248605d",
+      "user_id": "9c787872-45be-4fb4-a323-ff5e4199aced",
+      "image_url": "https://qftnpusgdlsdtggzgwnk.supabase.co/storage/v1/object/public/posts/9c787872-45be-4fb4-a323-ff5e4199aced/1764660428962_BV.jpg",
+      "caption": "i am pinky",
+      "location": "Unknown",
+      "ai_label": "safe",
+      "ai_toxicity": 0,
+      "is_blocked": false,
+      "created_at": "2025-12-02T07:27:11.676209+00:00"
+    }
+  ]
+}
