@@ -1,18 +1,19 @@
 "use client";
 
 import { API_URL } from "@/config";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, ShieldAlert, ShieldCheck, Sparkles } from "lucide-react";
+import { Send, ShieldAlert, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 
+// Force dynamic rendering just in case, though Suspense should handle it
 export const dynamic = "force-dynamic";
 
-export default function MessagesPage() {
+function MessagesContent() {
     const searchParams = useSearchParams();
     const initialChatId = searchParams.get('chatId');
 
@@ -298,5 +299,13 @@ export default function MessagesPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function MessagesPage() {
+    return (
+        <Suspense fallback={<div className="h-screen w-full flex items-center justify-center bg-black text-white">Loading messages...</div>}>
+            <MessagesContent />
+        </Suspense>
     );
 }
