@@ -19,13 +19,30 @@ const getAuthClient = (req: Request) => {
 // Get comments for a post
 router.get('/:postId', async (req: Request, res: Response) => {
     const { postId } = req.params;
+    const userId = req.query.userId as string;
 
     try {
-        const { data, error } = await supabase
+        let query = supabase
             .from('comments')
             .select('*, users(username, avatar_url)')
             .eq('post_id', postId)
             .order('created_at', { ascending: true });
+
+        // Exclude blocked users comments if userId is provided
+        if (userId) {
+            const { data: blocks } = await supabase
+                .from('blocks')
+                .select('*')
+                .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`);
+
+            const blockedIds = blocks?.map(b => b.blocker_id === userId ? b.blocked_id : b.blocker_id) || [];
+
+            if (blockedIds.length > 0) {
+                query = query.not('user_id', 'in', `(${blockedIds.join(',')})`);
+            }
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             return res.status(400).json({ error: error.message });
@@ -49,6 +66,9 @@ router.post('/:postId', async (req: Request, res: Response) => {
     try {
         // MOCK FOR TESTING AI MODERATION WITHOUT DB
         if (postId === '11111111-1111-1111-1111-111111111111') {
+            // ... existing mock logic ...
+            // (Shortened for brevity but functionality preserved if needed, assuming user wants real logic mostly)
+            // I'll keep the mock logic intact
             console.log('Processing mock post comment...');
             const moderationResult = await moderateText(text);
             console.log('Moderation result:', moderationResult);
@@ -60,7 +80,6 @@ router.post('/:postId', async (req: Request, res: Response) => {
                 });
             }
 
-            // Mock success response
             return res.json({
                 comment: {
                     id: 'mock-comment-id',
@@ -76,7 +95,7 @@ router.post('/:postId', async (req: Request, res: Response) => {
             });
         }
 
-        // 1. Get Post Owner (Optional check if post exists)
+        // 1. Get Post Owner
         const { data: post, error: postError } = await supabase
             .from('posts')
             .select('user_id')
@@ -87,9 +106,15 @@ router.post('/:postId', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Post not found' });
         }
 
-        // REMOVED FRIEND CHECK: Any user can comment now.
-        // The requirement is "any one can comment on the post"
-        // We still perform AI moderation below.
+        // 2. Check Blocking (New)
+        const { data: blocks } = await supabase
+            .from('blocks')
+            .select('*')
+            .or(`and(blocker_id.eq.${user_id},blocked_id.eq.${post.user_id}),and(blocker_id.eq.${post.user_id},blocked_id.eq.${user_id})`);
+
+        if (blocks && blocks.length > 0) {
+            return res.status(403).json({ error: 'Cannot comment on this post.' });
+        }
 
         // 3. AI Moderation
         const moderationResult = await moderateText(text);
@@ -102,8 +127,6 @@ router.post('/:postId', async (req: Request, res: Response) => {
         }
 
         // 4. Insert Comment
-        // Use service role key (supabase) directly to bypass RLS for now, 
-        // since we are handling auth and moderation manually in this endpoint.
         const { data, error } = await supabase
             .from('comments')
             .insert([{
@@ -118,6 +141,21 @@ router.post('/:postId', async (req: Request, res: Response) => {
 
         if (error) {
             return res.status(400).json({ error: error.message });
+        }
+
+        // Create Notification
+        try {
+            if (post.user_id !== user_id) {
+                await supabase.from('notifications').insert([{
+                    user_id: post.user_id, // Notify post owner
+                    sender_id: user_id, // Who performed the action
+                    type: 'comment',
+                    message: `commented: "${text.substring(0, 20)}${text.length > 20 ? '...' : ''}"`,
+                    is_read: false
+                }]);
+            }
+        } catch (notifyErr) {
+            console.error('Failed to send notification for comment:', notifyErr);
         }
 
         res.json({ comment: data[0], moderation: moderationResult });

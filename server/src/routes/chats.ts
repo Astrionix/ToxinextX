@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { moderateText } from '../services/moderationService';
+import { groq } from '../config/groq';
 
 const router = Router();
 
@@ -123,6 +124,53 @@ router.post('/:chatId/messages', async (req: Request, res: Response) => {
         res.json({ message: data[0], moderation: moderationResult });
     } catch (err) {
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Generate Smart Replies
+router.post('/:chatId/smart-reply', async (req: Request, res: Response) => {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+
+    try {
+        // Fetch last 10 messages for context
+        const { data: messages } = await supabase
+            .from('messages')
+            .select('sender_id, text')
+            .eq('chat_id', chatId)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+        if (!messages || messages.length === 0) {
+            return res.json({ suggestions: ["Hi!", "How are you?", "What's up?"] });
+        }
+
+        const conversation = messages.reverse().map(m =>
+            `${m.sender_id === userId ? 'Me' : 'Partner'}: ${m.text}`
+        ).join('\n');
+
+        const completion = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a helpful assistant for a social media chat. Suggest 3 short, relevant, and casual replies for "Me" based on the conversation context. Return ONLY a JSON object with a key "replies" containing an array of strings. Example: {"replies": ["Sounds good!", "See you there.", "No worries."]}'
+                },
+                { role: 'user', content: conversation }
+            ],
+            model: 'llama3-70b-8192',
+            temperature: 0.6,
+            max_tokens: 150,
+            response_format: { type: 'json_object' }
+        });
+
+        const content = completion.choices[0].message.content;
+        const suggestions = content ? JSON.parse(content).replies : [];
+
+        res.json({ suggestions });
+    } catch (err) {
+        console.error("Smart Reply Error:", err);
+        // Fallback
+        res.json({ suggestions: ["👍", "Okay", "Sounds good"] });
     }
 });
 

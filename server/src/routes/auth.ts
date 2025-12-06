@@ -1,15 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/supabase';
+import { validate } from '../middleware/validate';
+import { registerSchema, loginSchema } from '../schemas/validation';
 
 const router = Router();
 
 // Register
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', validate(registerSchema), async (req: Request, res: Response) => {
     const { email, password, username, avatar_url } = req.body;
-
-    if (!email || !password || !username) {
-        return res.status(400).json({ error: 'Email, password, and username are required' });
-    }
 
     try {
         // Use Admin API to create user with auto-confirmation
@@ -64,12 +62,8 @@ router.post('/register', async (req: Request, res: Response) => {
 });
 
 // Login
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', validate(loginSchema), async (req: Request, res: Response) => {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
-    }
 
     try {
         const { data, error } = await supabase.auth.signInWithPassword({

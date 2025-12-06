@@ -1,94 +1,154 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Heart, MessageCircle, Send, MoreHorizontal, Volume2, VolumeX } from "lucide-react";
-
-const reelsData = [
-    {
-        id: 1,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-        username: "bunny_official",
-        description: "Big Buck Bunny tells the story of a giant rabbit with a heart bigger than himself. 🐰❤️ #animation #bunny",
-        likes: 1200000,
-        comments: 45000,
-    },
-    {
-        id: 2,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-        username: "dream_works",
-        description: "The first open movie from Blender Foundation. 🐘💭 #blender #3d",
-        likes: 890000,
-        comments: 12000,
-    },
-    {
-        id: 3,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-        username: "tech_insider",
-        description: "Chromecast: For Bigger Blazes. 🔥 #tech #google",
-        likes: 560000,
-        comments: 8000,
-    },
-    {
-        id: 4,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-        username: "travel_diaries",
-        description: "Escape to the unknown. 🌍✈️ #travel #adventure",
-        likes: 2300000,
-        comments: 67000,
-    },
-    {
-        id: 5,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-        username: "fun_times",
-        description: "Just having some fun! 🤪 #fun #weekend",
-        likes: 120000,
-        comments: 2000,
-    },
-    {
-        id: 6,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
-        username: "joy_ride",
-        description: "Life is a joyride. 🚗💨 #drive #life",
-        likes: 450000,
-        comments: 5000,
-    },
-    {
-        id: 7,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
-        username: "meltdown_king",
-        description: "Sometimes you just melt. 🫠 #mood #funny",
-        likes: 89000,
-        comments: 1200,
-    },
-    {
-        id: 8,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-        username: "sintel_movie",
-        description: "Sintel - Third Open Movie by Blender Foundation. 🐉🗡️ #fantasy #movie",
-        likes: 3400000,
-        comments: 120000,
-    },
-];
+import { Heart, MessageCircle, Send, MoreHorizontal, Volume2, VolumeX, Plus, Loader2, X } from "lucide-react";
+import { API_URL } from "@/config";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogHeader } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
 
 export default function ReelsPage() {
+    const [reels, setReels] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [uploadOpen, setUploadOpen] = useState(false);
+    const [currentUser, setCurrentUser] = useState<any>(null);
+
+    useEffect(() => {
+        const user = localStorage.getItem("user");
+        if (user) setCurrentUser(JSON.parse(user));
+    }, []);
+
+    const fetchReels = async () => {
+        try {
+            const user = localStorage.getItem("user");
+            const userId = user ? JSON.parse(user).id : '';
+            const res = await fetch(`${API_URL}/api/reels?userId=${userId}`);
+            if (res.ok) {
+                const data = await res.json();
+                const mapped = data.map((r: any) => ({
+                    id: r.id,
+                    url: r.video_url,
+                    username: r.users?.username || "Unknown",
+                    description: r.description,
+                    likes: r.likes_count,
+                    comments: r.comments_count,
+                    user_avatar: r.users?.avatar_url,
+                    is_liked: r.is_liked
+                }));
+                setReels(mapped);
+            }
+        } catch (err) {
+            console.error("Failed to fetch reels", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchReels();
+    }, []);
+
     return (
-        <div className="h-screen w-full flex justify-center bg-black overflow-y-scroll snap-y snap-mandatory scrollbar-hide">
+        <div className="h-screen w-full flex justify-center bg-black overflow-y-scroll snap-y snap-mandatory scrollbar-hide relative">
+            <UploadReelDialog open={uploadOpen} onOpenChange={setUploadOpen} onUploaded={fetchReels} />
+
+            {reels.length === 0 && !loading && (
+                <div className="flex flex-col items-center justify-center p-10 text-gray-500 h-full">
+                    <p>No reels yet. Be the first!</p>
+                    <Button onClick={() => setUploadOpen(true)} className="mt-4 bg-white text-black hover:bg-gray-200">
+                        Upload Reel
+                    </Button>
+                </div>
+            )}
+
             <div className="w-full max-w-[400px] h-full">
-                {reelsData.map((reel) => (
-                    <ReelItem key={reel.id} reel={reel} />
+                {reels.map((reel) => (
+                    <ReelItem key={reel.id} reel={reel} currentUser={currentUser} />
                 ))}
+            </div>
+
+            {/* Floating Upload Button */}
+            <div className="absolute top-4 right-4 z-50">
+                <Button onClick={() => setUploadOpen(true)} size="icon" className="rounded-full bg-transparent hover:bg-gray-800 text-white border border-gray-600">
+                    <Plus className="w-6 h-6" />
+                </Button>
             </div>
         </div>
     );
 }
 
-function ReelItem({ reel }: { reel: any }) {
+function UploadReelDialog({ open, onOpenChange, onUploaded }: { open: boolean, onOpenChange: (open: boolean) => void, onUploaded: () => void }) {
+    const [file, setFile] = useState<File | null>(null);
+    const [description, setDescription] = useState("");
+    const [uploading, setUploading] = useState(false);
+
+    const handleUpload = async () => {
+        if (!file) return;
+        setUploading(true);
+
+        try {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const formData = new FormData();
+            formData.append('video', file);
+            formData.append('user_id', user.id);
+            formData.append('description', description);
+
+            const res = await fetch(`${API_URL}/api/reels`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (res.ok) {
+                onOpenChange(false);
+                setFile(null);
+                setDescription("");
+                onUploaded();
+            } else {
+                alert("Upload failed");
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="bg-gray-900 border border-gray-800 text-white max-w-md">
+                <DialogTitle className="text-xl font-bold mb-4">Upload Reel</DialogTitle>
+                <div className="space-y-4">
+                    <input
+                        type="file"
+                        accept="video/*"
+                        onChange={(e) => setFile(e.target.files?.[0] || null)}
+                        className="w-full bg-black border border-gray-700 p-2 rounded text-sm"
+                    />
+                    <textarea
+                        placeholder="Description..."
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className="w-full bg-black border border-gray-700 p-2 rounded h-24 text-sm resize-none"
+                    />
+                    <Button onClick={handleUpload} disabled={!file || uploading} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+                        {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        {uploading ? "Uploading..." : "Post Reel"}
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function ReelItem({ reel, currentUser }: { reel: any, currentUser: any }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isMuted, setIsMuted] = useState(true);
     const [isPlaying, setIsPlaying] = useState(true);
-    const [isLiked, setIsLiked] = useState(false);
+    const [isLiked, setIsLiked] = useState(reel.is_liked);
     const [likeCount, setLikeCount] = useState(reel.likes);
     const [commentCount, setCommentCount] = useState(reel.comments);
+    const [showComments, setShowComments] = useState(false);
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -136,13 +196,32 @@ function ReelItem({ reel }: { reel: any }) {
         }
     };
 
-    const handleLike = () => {
-        if (isLiked) {
-            setLikeCount((prev: number) => prev - 1);
-        } else {
-            setLikeCount((prev: number) => prev + 1);
-        }
+    const handleLike = async () => {
+        if (!currentUser) return;
+
+        // Optimistic
+        const prev = isLiked;
+        const prevCount = likeCount;
+
         setIsLiked(!isLiked);
+        setLikeCount((prev: number) => isLiked ? prev - 1 : prev + 1);
+
+        try {
+            const res = await fetch(`${API_URL}/api/reels/${reel.id}/like`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id })
+            });
+            if (!res.ok) {
+                // Revert
+                setIsLiked(prev);
+                setLikeCount(prevCount);
+            }
+        } catch (e) {
+            console.error(e);
+            setIsLiked(prev);
+            setLikeCount(prevCount);
+        }
     };
 
     const formatCount = (count: number) => {
@@ -164,6 +243,14 @@ function ReelItem({ reel }: { reel: any }) {
                 onDoubleClick={handleLike}
             />
 
+            {/* Comments Dialog */}
+            <CommentsDialog
+                open={showComments}
+                onOpenChange={setShowComments}
+                reelId={reel.id}
+                currentUser={currentUser}
+            />
+
             {/* Overlay Controls */}
             <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 bg-gradient-to-b from-black/20 via-transparent to-black/60">
                 <div className="flex justify-end pt-4">
@@ -176,7 +263,7 @@ function ReelItem({ reel }: { reel: any }) {
                     <div className="flex-1 pr-4">
                         <div className="flex items-center gap-2 mb-2">
                             <div className="w-8 h-8 rounded-full bg-gray-500 overflow-hidden">
-                                <img src={`https://i.pravatar.cc/150?u=${reel.username}`} alt="avatar" className="w-full h-full object-cover" />
+                                <img src={reel.user_avatar || `https://i.pravatar.cc/150?u=${reel.username}`} alt="avatar" className="w-full h-full object-cover" />
                             </div>
                             <span className="font-bold text-white text-sm">{reel.username}</span>
                             <button className="text-xs font-semibold border border-white/50 px-2 py-1 rounded text-white pointer-events-auto hover:bg-white/20">Follow</button>
@@ -192,7 +279,7 @@ function ReelItem({ reel }: { reel: any }) {
                             <span className="text-white text-xs font-medium">{formatCount(likeCount)}</span>
                         </button>
 
-                        <button className="flex flex-col items-center gap-1 group">
+                        <button onClick={() => setShowComments(true)} className="flex flex-col items-center gap-1 group">
                             <div className="p-2 rounded-full hover:bg-white/10 transition">
                                 <MessageCircle size={28} className="text-white group-hover:scale-110 transition-transform" />
                             </div>
@@ -212,11 +299,98 @@ function ReelItem({ reel }: { reel: any }) {
                         </button>
 
                         <div className="w-8 h-8 rounded-md border-2 border-white overflow-hidden mt-2 animate-spin-slow">
-                            <img src={`https://i.pravatar.cc/150?u=${reel.username}`} alt="music" className="w-full h-full object-cover" />
+                            <img src={reel.user_avatar || `https://i.pravatar.cc/150?u=${reel.username}`} alt="music" className="w-full h-full object-cover" />
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+    );
+}
+
+function CommentsDialog({ open, onOpenChange, reelId, currentUser }: { open: boolean, onOpenChange: any, reelId: string, currentUser: any }) {
+    const [comments, setComments] = useState<any[]>([]);
+    const [text, setText] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (open) {
+            fetchComments();
+        }
+    }, [open]);
+
+    const fetchComments = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_URL}/api/reels/${reelId}/comments`);
+            if (res.ok) {
+                setComments(await res.json());
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const postComment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!text.trim() || !currentUser) return;
+
+        const tempId = Date.now();
+        const optimisticComment = {
+            id: tempId,
+            text,
+            users: { username: currentUser.username, avatar_url: currentUser.avatar_url }
+        };
+
+        setComments([...comments, optimisticComment]);
+        setText("");
+
+        try {
+            await fetch(`${API_URL}/api/reels/${reelId}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.id, text: text })
+            });
+            fetchComments(); // Refresh for real ID
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="bg-gray-900 border border-gray-800 text-white max-w-md h-[50vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>Comments</DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                    {loading ? <div className="text-center text-sm text-gray-500">Loading...</div> :
+                        comments.length === 0 ? <div className="text-center text-sm text-gray-500">No comments yet.</div> :
+                            comments.map((c) => (
+                                <div key={c.id} className="flex gap-3">
+                                    <Avatar className="w-8 h-8">
+                                        <AvatarImage src={c.users?.avatar_url} />
+                                        <AvatarFallback>{c.users?.username?.[0]}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-xs text-gray-300">{c.users?.username}</span>
+                                        <span className="text-sm">{c.text}</span>
+                                    </div>
+                                </div>
+                            ))}
+                </div>
+                <form onSubmit={postComment} className="flex gap-2 pt-2 border-t border-gray-800">
+                    <Input
+                        value={text}
+                        onChange={e => setText(e.target.value)}
+                        placeholder="Add a comment..."
+                        className="bg-black border-gray-700"
+                    />
+                    <Button type="submit" size="sm">Post</Button>
+                </form>
+            </DialogContent>
+        </Dialog>
     );
 }

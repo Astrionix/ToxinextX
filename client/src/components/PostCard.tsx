@@ -20,10 +20,12 @@ interface PostProps {
     isSafe?: boolean;
     currentUserId?: string;
     postUserId: string;
+    initialIsLiked?: boolean;
+    priority?: boolean;
 }
 
-export function PostCard({ postId, username, avatar, image, caption, likes: initialLikes, comments: initialComments, time, isSafe = true, currentUserId = "00000000-0000-0000-0000-000000000000", postUserId }: PostProps) {
-    const [isLiked, setIsLiked] = useState(false);
+export function PostCard({ postId, username, avatar, image, caption, likes: initialLikes, comments: initialComments, time, isSafe = true, currentUserId = "00000000-0000-0000-0000-000000000000", postUserId, initialIsLiked = false, priority = false }: PostProps) {
+    const [isLiked, setIsLiked] = useState(initialIsLiked);
     const [likesCount, setLikesCount] = useState(initialLikes);
     const [isSaved, setIsSaved] = useState(false);
     const [comment, setComment] = useState("");
@@ -32,17 +34,42 @@ export function PostCard({ postId, username, avatar, image, caption, likes: init
     const [postComments, setPostComments] = useState<{ user: string, text: string }[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleLike = () => {
-        if (isLiked) {
-            setLikesCount(prev => prev - 1);
-        } else {
-            setLikesCount(prev => prev + 1);
-        }
+    const handleLike = async () => {
+        // Optimistic Update
+        const previousLiked = isLiked;
+        const previousCount = likesCount;
+
         setIsLiked(!isLiked);
+        setLikesCount(prev => isLiked ? prev - 1 : prev + 1);
+
+        try {
+            await fetch(`${API_URL}/api/posts/${postId}/like`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUserId })
+            });
+        } catch (err) {
+            // Revert on error
+            setIsLiked(previousLiked);
+            setLikesCount(previousCount);
+            console.error(err);
+        }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        const prevSaved = isSaved;
         setIsSaved(!isSaved);
+        try {
+            const res = await fetch(`${API_URL}/api/bookmarks/${postId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUserId })
+            });
+            if (!res.ok) setIsSaved(prevSaved);
+        } catch (e) {
+            console.error(e);
+            setIsSaved(prevSaved);
+        }
     };
 
     const handleCommentSubmit = async (e: React.FormEvent) => {
@@ -70,7 +97,14 @@ export function PostCard({ postId, username, avatar, image, caption, likes: init
 
             if (!response.ok) {
                 // Handle error (e.g., blocked comment)
-                alert(data.error || "Failed to post comment");
+                let msg = data.error || "Failed to post comment";
+                if (data.details && data.details.category) {
+                    msg += `\nReason: ${data.details.category}`;
+                    if (data.details.detected_language) {
+                        msg += ` (${data.details.detected_language})`;
+                    }
+                }
+                alert(msg);
                 if (data.details) {
                     console.log("Moderation details:", data.details);
                 }
@@ -87,6 +121,24 @@ export function PostCard({ postId, username, avatar, image, caption, likes: init
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const toggleComments = async () => {
+        if (!showComments && postComments.length === 0 && commentsCount > 0) {
+            try {
+                const res = await fetch(`${API_URL}/api/comments/${postId}?userId=${currentUserId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setPostComments(data.map((c: any) => ({
+                        user: c.users?.username || 'user',
+                        text: c.text
+                    })));
+                }
+            } catch (err) {
+                console.error("Failed to fetch comments", err);
+            }
+        }
+        setShowComments(!showComments);
     };
 
     return (
@@ -109,8 +161,22 @@ export function PostCard({ postId, username, avatar, image, caption, likes: init
                 <MoreHorizontal className="w-5 h-5 text-white cursor-pointer" />
             </CardHeader>
             <CardContent className="p-0 relative aspect-square bg-gray-900" onDoubleClick={handleLike}>
-                <Image src={image} alt="Post" fill className="object-cover" />
-                {/* Heart animation overlay could go here */}
+                <Image src={image} alt="Post" fill className={`object-cover ${isSafe ? '' : 'blur-xl'}`} sizes="(max-width: 470px) 100vw, 470px" priority={priority} unoptimized />
+                {!isSafe && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10 p-4 text-center">
+                        <ShieldCheck className="w-12 h-12 text-red-500 mb-2" />
+                        <h3 className="text-white font-bold text-lg">Sensitive Content</h3>
+                        <p className="text-gray-300 text-sm mb-4">This post has been flagged as potential safety violation.</p>
+                        <button onClick={(e) => {
+                            e.stopPropagation();
+                            const img = e.currentTarget.parentElement?.parentElement?.querySelector('img');
+                            if (img) img.classList.remove('blur-xl');
+                            e.currentTarget.parentElement?.remove();
+                        }} className="px-4 py-2 bg-gray-800 rounded-md text-white text-sm hover:bg-gray-700">
+                            View Anyway
+                        </button>
+                    </div>
+                )}
             </CardContent>
             <CardFooter className="flex flex-col items-start p-3 gap-2">
                 <div className="flex items-center justify-between w-full text-white">
@@ -118,7 +184,7 @@ export function PostCard({ postId, username, avatar, image, caption, likes: init
                         <button onClick={handleLike} className="focus:outline-none">
                             <Heart className={`w-6 h-6 cursor-pointer transition-colors ${isLiked ? "fill-red-500 text-red-500" : "hover:text-gray-400"}`} />
                         </button>
-                        <button onClick={() => setShowComments(!showComments)} className="focus:outline-none">
+                        <button onClick={toggleComments} className="focus:outline-none">
                             <MessageCircle className="w-6 h-6 cursor-pointer hover:text-gray-400 transition-colors" />
                         </button>
                         <Send className="w-6 h-6 cursor-pointer hover:text-gray-400 transition-colors" />
@@ -130,11 +196,19 @@ export function PostCard({ postId, username, avatar, image, caption, likes: init
                 <div className="font-semibold text-sm text-white">{likesCount.toLocaleString()} likes</div>
                 <div className="text-sm text-white">
                     <Link href={`/profile/${postUserId}`} className="font-semibold mr-2 cursor-pointer hover:opacity-80">{username}</Link>
-                    {caption}
+                    {caption.split(/(\s+)/).map((part, index) => {
+                        if (part.startsWith('#')) {
+                            return <Link key={index} href={`/search?q=${part.slice(1)}`} className="text-blue-400 hover:underline">{part}</Link>;
+                        }
+                        if (part.startsWith('@')) {
+                            return <Link key={index} href={`/search?q=${part.slice(1)}`} className="text-blue-400 hover:underline">{part}</Link>;
+                        }
+                        return part;
+                    })}
                 </div>
 
                 <button
-                    onClick={() => setShowComments(!showComments)}
+                    onClick={toggleComments}
                     className="text-gray-500 text-sm cursor-pointer hover:text-gray-400"
                 >
                     View all {commentsCount} comments

@@ -6,17 +6,19 @@ interface ModerationResult {
     category: string;
     explanation: string;
     safe_rewrite: string | null;
+    detected_language?: string;
 }
 
 export async function moderateText(text: string): Promise<ModerationResult> {
     try {
-        // Step 1: Fast screening with Llama 3.1 8B Instant
+        // Step 1: Fast screening with Llama 3.1 8B Instant (Multi-lingual aware)
         const screeningCompletion = await groq.chat.completions.create({
             messages: [
                 {
                     role: "system",
-                    content: `You are a toxicity detector. Respond with a JSON object containing 'toxicity_score' (0.0 to 1.0) and 'is_toxic' (boolean). 
-          Content is toxic if it contains hate speech, cyberbullying, harassment, threats, or severe abuse. 
+                    content: `You are a multi-lingual toxicity detector. You can understand English, Spanish, French, German, Hindi, Portuguese, and many other languages.
+          Respond with a JSON object containing 'toxicity_score' (0.0 to 1.0) and 'is_toxic' (boolean).
+          Content is toxic if it contains hate speech, cyberbullying, harassment, threats, or severe abuse in ANY language.
           If unsure, lean towards marking as toxic for further review.`
                 },
                 {
@@ -44,9 +46,9 @@ export async function moderateText(text: string): Promise<ModerationResult> {
             };
         }
 
-        // Step 2: Deep classification with Llama 3.3 70B Versatile
+        // Step 2: Deep classification with Llama 3.3 70B Versatile (or 8b for speed)
         const classificationPrompt = `
-      You are an AI content safety and moderation system.
+      You are an expert AI content safety and moderation system capable of understanding nuanced hate speech and cyberbullying in multiple languages (English, Hindi, Spanish, etc.).
       Analyze the following text for hate speech, cyberbullying, harassment, threats, abuse, and spam.
       
       Classify the content into one of these categories:
@@ -64,7 +66,7 @@ export async function moderateText(text: string): Promise<ModerationResult> {
       - block (if hate speech, cyberbullying, harassment, or severe toxicity)
       - shadowban (if spam)
 
-      Provide a safe rewrite of the content if it is toxic. The rewrite should convey the original intent (if possible) without the toxicity.
+      Provide a safe rewrite of the content if it is toxic. The rewrite should convey the original intent (if possible) without the toxicity, maintaining the original language.
 
       Respond with a JSON object:
       {
@@ -72,7 +74,8 @@ export async function moderateText(text: string): Promise<ModerationResult> {
         "toxicity_score": number (0.0-1.0),
         "action": "allow" | "warn" | "block" | "shadowban",
         "explanation": "string",
-        "safe_rewrite": "string" | null
+        "safe_rewrite": "string" | null,
+        "detected_language": "string" (e.g. "English", "Hindi", "Spanish")
       }
     `;
 
@@ -87,6 +90,7 @@ export async function moderateText(text: string): Promise<ModerationResult> {
                     content: text
                 }
             ],
+            // Use a larger model for deep analysis if possible, but 8b is fast and currently specified
             model: "llama-3.1-8b-instant",
             response_format: { type: "json_object" },
             temperature: 0.1,

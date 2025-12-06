@@ -10,6 +10,10 @@ import followsRoutes from './routes/follows';
 import commentsRoutes from './routes/comments';
 import chatsRoutes from './routes/chats';
 import postsRoutes from './routes/posts';
+import storiesRoutes from './routes/stories';
+import notificationsRoutes from './routes/notifications';
+import reelsRoutes from './routes/reels';
+import bookmarksRoutes from './routes/bookmarks';
 
 // Load environment variables
 dotenv.config();
@@ -35,6 +39,10 @@ app.use('/api/follows', followsRoutes);
 app.use('/api/comments', commentsRoutes);
 app.use('/api/chats', chatsRoutes);
 app.use('/api/posts', postsRoutes);
+app.use('/api/stories', storiesRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/reels', reelsRoutes);
+app.use('/api/bookmarks', bookmarksRoutes);
 
 // Start server
 app.listen(PORT, () => {

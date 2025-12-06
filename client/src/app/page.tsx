@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { StoryBar } from "@/components/StoryBar";
 import { PostCard } from "@/components/PostCard";
 
+import { Virtuoso } from "react-virtuoso";
+
 export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -18,7 +20,15 @@ export default function Home() {
 
     const fetchPosts = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/posts`);
+        let url = `${API_URL}/api/posts`;
+        const user = localStorage.getItem("user");
+        if (user) {
+          const parsedUser = JSON.parse(user);
+          // Default to main feed (following + self)
+          url += `?user_id=${parsedUser.id}&type=feed`;
+        }
+
+        const res = await fetch(url);
         const data = await res.json();
         if (res.ok) {
           setPosts(data);
@@ -38,22 +48,30 @@ export default function Home() {
         {posts.length === 0 ? (
           <div className="text-white text-center mt-10">No posts yet. Be the first to create one!</div>
         ) : (
-          posts.map((post) => (
-            <PostCard
-              key={post.id}
-              postId={post.id}
-              username={post.users?.username || "Unknown"}
-              avatar={post.users?.avatar_url || `https://i.pravatar.cc/150?u=${post.user_id}`}
-              image={post.image_url}
-              caption={post.caption}
-              likes={0} // TODO: Fetch real likes
-              comments={0} // TODO: Fetch real comments count
-              time={new Date(post.created_at).toLocaleDateString()}
-              isSafe={post.ai_label === 'safe'}
-              postUserId={post.user_id}
-              currentUserId={currentUser?.id}
-            />
-          ))
+          <Virtuoso
+            useWindowScroll
+            data={posts}
+            itemContent={(index, post) => (
+              <div className="mb-4">
+                <PostCard
+                  key={post.id}
+                  postId={post.id}
+                  username={post.users?.username || "Unknown"}
+                  avatar={post.users?.avatar_url || `https://i.pravatar.cc/150?u=${post.user_id}`}
+                  image={post.image_url}
+                  caption={post.caption}
+                  likes={post.likes ? post.likes.length : 0}
+                  initialIsLiked={post.likes && currentUser ? post.likes.some((l: any) => l.user_id === currentUser.id) : false}
+                  comments={0}
+                  time={new Date(post.created_at).toLocaleDateString()}
+                  isSafe={post.ai_label === 'safe'}
+                  postUserId={post.user_id}
+                  currentUserId={currentUser?.id}
+                  priority={index === 0}
+                />
+              </div>
+            )}
+          />
         )}
       </div>
     </div>

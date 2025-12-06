@@ -1,35 +1,90 @@
 "use client";
 
 import { API_URL } from "@/config";
-
 import { useEffect, useState, useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Send, ShieldAlert, ShieldCheck, Sparkles } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { useSearchParams } from "next/navigation";
 
 export default function MessagesPage() {
+    const searchParams = useSearchParams();
+    const initialChatId = searchParams.get('chatId');
+
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [chats, setChats] = useState<any[]>([]);
     const [selectedChat, setSelectedChat] = useState<any>(null);
     const [messages, setMessages] = useState<any[]>([]);
     const [newMessage, setNewMessage] = useState("");
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+    const typingTimeoutRef = useRef<any>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
+    // Initial load handling
     useEffect(() => {
         const storedUser = localStorage.getItem("user");
         if (storedUser) {
             const user = JSON.parse(storedUser);
             setCurrentUser(user);
-            fetchChats(user.id);
+            fetchChats(user.id).then((loadedChats: any[]) => {
+                // If query param exists, auto-select that chat
+                if (initialChatId && loadedChats) {
+                    const target = loadedChats.find((c: any) => c.id === initialChatId);
+                    if (target) setSelectedChat(target);
+                }
+            });
         }
-    }, []);
+    }, [initialChatId]); // Depend on initialChatId so deep links work properly
 
     useEffect(() => {
         if (selectedChat) {
             fetchMessages(selectedChat.id);
-            // In a real app, subscribe to Supabase Realtime here
+            setSuggestions([]);
+
+            const channel = supabase
+                .channel(`chat:${selectedChat.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `chat_id=eq.${selectedChat.id}`
+                    },
+                    (payload) => {
+                        setMessages((current) => {
+                            if (current.some(msg => msg.id === payload.new.id)) return current;
+                            return [...current, payload.new];
+                        });
+                    }
+                )
+                .on('broadcast', { event: 'typing' }, (payload) => {
+                    const { username, user_id } = payload.payload;
+                    if (user_id !== currentUser?.id) {
+                        setTypingUsers((prev) => {
+                            const newSet = new Set(prev);
+                            newSet.add(username);
+                            return newSet;
+                        });
+                        setTimeout(() => {
+                            setTypingUsers((prev) => {
+                                const newSet = new Set(prev);
+                                newSet.delete(username);
+                                return newSet;
+                            });
+                        }, 3000);
+                    }
+                })
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            };
         }
     }, [selectedChat]);
 
@@ -43,10 +98,14 @@ export default function MessagesPage() {
         try {
             const res = await fetch(`${API_URL}/api/chats?userId=${userId}`);
             const data = await res.json();
-            if (res.ok) setChats(data);
+            if (res.ok) {
+                setChats(data);
+                return data; // Return data for chaining
+            }
         } catch (err) {
             console.error(err);
         }
+        return [];
     };
 
     const fetchMessages = async (chatId: string) => {
@@ -59,36 +118,66 @@ export default function MessagesPage() {
         }
     };
 
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newMessage.trim() || !selectedChat || !currentUser) return;
+    const handleSendMessage = async (e?: React.FormEvent, textOverride?: string) => {
+        if (e) e.preventDefault();
+        const textToSend = textOverride || newMessage;
+
+        if (!textToSend.trim() || !selectedChat || !currentUser) return;
 
         try {
+            const tempId = Date.now().toString();
+            const tempMsg = {
+                id: tempId,
+                text: textToSend,
+                sender_id: currentUser.id,
+                created_at: new Date().toISOString(),
+                ai_label: 'pending'
+            };
+            setMessages(prev => [...prev, tempMsg]);
+            if (!textOverride) setNewMessage("");
+            setSuggestions([]);
+
             const res = await fetch(`${API_URL}/api/chats/${selectedChat.id}/messages`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sender_id: currentUser.id, text: newMessage }),
+                body: JSON.stringify({ sender_id: currentUser.id, text: textToSend }),
             });
             const data = await res.json();
 
             if (res.ok) {
-                setMessages([...messages, data.message]);
-                setNewMessage("");
+                setMessages(prev => prev.map(m => m.id === tempId ? data.message : m));
             } else {
-                alert(data.error); // Simple error handling
+                alert(data.error);
+                setMessages(prev => prev.filter(m => m.id !== tempId));
             }
         } catch (err) {
             console.error(err);
         }
     };
 
+    const generateSmartReplies = async () => {
+        if (!selectedChat || !currentUser) return;
+        setIsGenerating(true);
+        try {
+            const res = await fetch(`${API_URL}/api/chats/${selectedChat.id}/smart-reply`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id })
+            });
+            const data = await res.json();
+            if (data.suggestions) setSuggestions(data.suggestions);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     return (
         <div className="flex h-screen bg-black text-white">
-            {/* Chat List */}
             <div className="w-full md:w-1/3 border-r border-gray-800 flex flex-col">
                 <div className="p-4 border-b border-gray-800 font-bold text-xl flex justify-between items-center">
                     <span>{currentUser?.username}</span>
-                    {/* New Chat Button could go here */}
                 </div>
                 <ScrollArea className="flex-1">
                     {chats.map((chat) => (
@@ -110,7 +199,6 @@ export default function MessagesPage() {
                 </ScrollArea>
             </div>
 
-            {/* Chat Window */}
             <div className="hidden md:flex flex-col flex-1">
                 {selectedChat ? (
                     <>
@@ -120,6 +208,7 @@ export default function MessagesPage() {
                                 <AvatarFallback>{selectedChat.otherUser?.username?.[0]}</AvatarFallback>
                             </Avatar>
                             <span className="font-semibold">{selectedChat.otherUser?.username}</span>
+                            {typingUsers.size > 0 && <span className="text-xs text-blue-400 animate-pulse">Typing...</span>}
                         </div>
 
                         <ScrollArea className="flex-1 p-4">
@@ -143,17 +232,57 @@ export default function MessagesPage() {
                             </div>
                         </ScrollArea>
 
-                        <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-800 flex gap-2">
-                            <Input
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                placeholder="Message..."
-                                className="bg-gray-900 border-gray-700 text-white rounded-full"
-                            />
-                            <Button type="submit" variant="ghost" className="text-blue-500 font-semibold hover:text-blue-400">
-                                Send
-                            </Button>
-                        </form>
+                        <div className="p-4 border-t border-gray-800 flex flex-col gap-2">
+                            {suggestions.length > 0 && (
+                                <div className="flex gap-2 mb-2 overflow-x-auto">
+                                    {suggestions.map((s, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => handleSendMessage(undefined, s)}
+                                            className="px-3 py-1 bg-blue-500/20 text-blue-400 text-sm rounded-full hover:bg-blue-500/30 whitespace-nowrap transition-colors"
+                                        >
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={generateSmartReplies}
+                                    disabled={isGenerating}
+                                    className={isGenerating ? "animate-pulse" : ""}
+                                    title="Generate AI Replies"
+                                >
+                                    <Sparkles className={`w-5 h-5 ${isGenerating ? "text-purple-400" : "text-gray-400 hover:text-purple-400"}`} />
+                                </Button>
+                                <Input
+                                    value={newMessage}
+                                    onChange={(e) => {
+                                        setNewMessage(e.target.value);
+                                        if (!typingTimeoutRef.current && currentUser) {
+                                            const channel = supabase.channel(`chat:${selectedChat.id}`);
+                                            channel.send({
+                                                type: 'broadcast',
+                                                event: 'typing',
+                                                payload: { user_id: currentUser.id, username: currentUser.username }
+                                            });
+                                            typingTimeoutRef.current = setTimeout(() => {
+                                                typingTimeoutRef.current = null;
+                                            }, 2000);
+                                        }
+                                    }}
+                                    placeholder="Message..."
+                                    className="bg-gray-900 border-gray-700 text-white rounded-full flex-1"
+                                />
+                                <Button type="submit" variant="ghost" className="text-blue-500 font-semibold hover:text-blue-400">
+                                    Send
+                                </Button>
+                            </form>
+                        </div>
                     </>
                 ) : (
                     <div className="flex flex-col items-center justify-center flex-1 text-center">

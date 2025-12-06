@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { moderateText } from '../services/moderationService';
-import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
+import multer from 'multer';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -36,8 +36,8 @@ router.post('/', upload.single('image'), async (req: Request, res: Response) => 
         // Handle File Upload
         if (file) {
             const fileName = `${user_id}/${Date.now()}_${file.originalname}`;
-            // Use authSupabase for upload to respect RLS
-            const { data: uploadData, error: uploadError } = await authSupabase.storage
+            // Use admin supabase client to bypass RLS for storage (since we handle auth in backend)
+            const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('posts')
                 .upload(fileName, file.buffer, {
                     contentType: file.mimetype,
@@ -45,7 +45,6 @@ router.post('/', upload.single('image'), async (req: Request, res: Response) => 
                 });
 
             if (uploadError) {
-                // If bucket doesn't exist, try to create it (though usually manual)
                 console.error("Upload error:", uploadError);
                 return res.status(500).json({ error: 'Failed to upload image: ' + uploadError.message });
             }
@@ -100,9 +99,6 @@ router.post('/', upload.single('image'), async (req: Request, res: Response) => 
 
             if (createError) {
                 console.error("Failed to auto-create user in public table:", createError);
-                // If error is duplicate key, it means it was created in parallel? 
-                // But we checked !userExists. 
-                // We'll try to proceed or return error.
                 return res.status(400).json({ error: 'Failed to sync user profile: ' + createError.message });
             }
             console.log(`User ${user_id} synced to public.users successfully.`);
@@ -134,20 +130,131 @@ router.post('/', upload.single('image'), async (req: Request, res: Response) => 
     }
 });
 
-// Get Feed Posts (for now, just all posts)
-router.get('/', async (req: Request, res: Response) => {
+// Toggle Like on a Post
+router.post('/:id/like', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { user_id } = req.body;
+
+    if (!user_id) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
     try {
-        const { data, error } = await supabase
+        // Check if like exists
+        const { data: existingLike, error: checkError } = await supabase
+            .from('likes')
+            .select('*')
+            .eq('post_id', id)
+            .eq('user_id', user_id)
+            .single();
+
+        if (checkError && checkError.code !== 'PGRST116') {
+            return res.status(400).json({ error: checkError.message });
+        }
+
+        if (existingLike) {
+            // Unlike
+            const { error: deleteError } = await supabase
+                .from('likes')
+                .delete()
+                .eq('id', existingLike.id);
+
+            if (deleteError) return res.status(400).json({ error: deleteError.message });
+            return res.json({ liked: false });
+        } else {
+            // Like
+            const { error: insertError } = await supabase
+                .from('likes')
+                .insert([{ post_id: id, user_id }]);
+
+            if (insertError) return res.status(400).json({ error: insertError.message });
+
+            // Create Notification
+            try {
+                const { data: post } = await supabase.from('posts').select('user_id').eq('id', id).single();
+                if (post && post.user_id !== user_id) {
+                    await supabase.from('notifications').insert([{
+                        user_id: post.user_id, // Notify post owner
+                        sender_id: user_id, // Who performed the action
+                        type: 'like',
+                        message: 'liked your post.',
+                        is_read: false
+                    }]);
+                }
+            } catch (notifyErr) {
+                console.error('Failed to send notification for like:', notifyErr);
+            }
+
+            return res.json({ liked: true });
+        }
+    } catch (err) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get Feed Posts
+router.get('/', async (req: Request, res: Response) => {
+    const userId = (req.query.user_id || req.query.userId) as string;
+    const type = req.query.type as string;
+
+    console.log(`GET /api/posts - userId: ${userId}, type: ${type}`);
+
+    if (type === 'feed' && !userId) {
+        return res.status(400).json({ error: 'User ID is required for feed' });
+    }
+
+    try {
+        let query = supabase
             .from('posts')
-            .select('*, users(username, avatar_url)')
+            // REMOVED is_private from column list to fix 400 error. Re-added likes(user_id) for proper client state.
+            // Using standard left join syntax.
+            .select('*, users(username, avatar_url), likes(user_id)')
             .order('created_at', { ascending: false });
 
-        if (error) {
-            return res.status(400).json({ error: error.message });
+        if (type === 'feed') { // UserId is guaranteed by check above
+            // 1. Get List of Following IDs
+            const { data: followingData } = await supabase
+                .from('follows')
+                .select('following_id')
+                .eq('follower_id', userId);
+
+            const followingIds = followingData?.map(f => f.following_id) || [];
+            // Add self to feed
+            followingIds.push(userId);
+
+            query = query.in('user_id', followingIds);
+        } else if (type === 'explore') {
+            // Fetch recent posts for explore, limit to 50
+            query = query.limit(50);
         }
+
+        // Exclude blocked users if userId is present
+        if (userId) {
+            const { data: blocks } = await supabase
+                .from('blocks')
+                .select('*')
+                .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`);
+
+            const blockedIds = blocks?.map(b => b.blocker_id === userId ? b.blocked_id : b.blocker_id) || [];
+
+            if (blockedIds.length > 0) {
+                query = query.not('user_id', 'in', `(${blockedIds.join(',')})`);
+            }
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error("Fetch Posts Error:", error); // Log full error
+            return res.status(400).json({ error: error.message, details: error });
+        }
+
+        // Since we removed is_private from DB fetch, filtering by it is impossible unless we fetch it separately.
+        // Assuming public posts for now. If privacy is needed, we must add is_private to users table in DB.
 
         res.json(data);
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

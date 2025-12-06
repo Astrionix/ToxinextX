@@ -23,6 +23,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'qftnpusgdlsdtggzgwnk.supabase.co',
       },
+      {
+        protocol: 'https',
+        hostname: 'hncthbgujarcnprmguyh.supabase.co',
+      },
     ],
   },
   // reactCompiler: true, // Commenting out as it might cause issues if not fully supported yet or if user said No (I said No in prompt but config has it true?)
