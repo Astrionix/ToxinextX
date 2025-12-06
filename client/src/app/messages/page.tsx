@@ -10,6 +10,8 @@ import { Send, ShieldAlert, ShieldCheck, Sparkles } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default function MessagesPage() {
     const searchParams = useSearchParams();
     const initialChatId = searchParams.get('chatId');
